@@ -1,8 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>QIcon/break.png</file>
-        <file>QIcon/clean.png</file>
-        <file>QIcon/copy.png</file>
-        <file>QIcon/window.png</file>
-    </qresource>
-</RCC>
