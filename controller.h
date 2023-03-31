@@ -208,6 +208,8 @@ private:
     QString TCPServerState;
 
     QString TCPClientState;
+
+    int TCPServerHaveClient;
 };
 
 

@@ -15,6 +15,10 @@ controller::controller(QWidget *parent) :
     //recordState = 1: recording
     recordState = 0;
 
+    //TCPServerHaveClient = 0: no client connect
+    //... = 1: have client
+    TCPServerHaveClient = 0;
+
     head = "$$$$^";
 
     timeFormat = "yyyy.mm.dd hh:mm:ss.zzz";
@@ -23,8 +27,8 @@ controller::controller(QWidget *parent) :
 
 //------------------------------SERVER MODEL----------------------------------------
     SCmodel = new model(this);
-/*----------server subthread----------------
-    QThread* serverThread = new QThread;
+//----------server subthread----------------
+    /*QThread* serverThread = new QThread;
     SCmodel->moveToThread(serverThread);
     serverThread->start();*/
 
@@ -49,8 +53,8 @@ controller::controller(QWidget *parent) :
 
 //-------------------------------CLIENT MODEL----------------------------------------
     Cmodel = new model_client;
-/*-----------client subthread---------------
-    QThread* clientThread = new QThread;
+//-----------client subthread---------------
+    /*QThread* clientThread = new QThread;
     Cmodel->moveToThread(clientThread);
     clientThread->start();*/
 
@@ -320,7 +324,7 @@ void controller::on_BcleanSend_clicked()
     ui->EtextSend->clear();
 }
 
-//activate listen
+//activate listen button
 void controller::on_BactivateListen_clicked()
 {
     if (! SCmodel->m_s->isListening()){
@@ -343,6 +347,8 @@ void controller::slotUpdateClientList(QList<QTcpSocket *> socketList)
     if(socketList.size() != 0){
         ui->CBclientList->addItem(tr("所有客户端共") +
                                   QString::number(socketList.size()) + tr("台"));
+
+        TCPServerHaveClient = 1;
         for(int j = 0;
             j < socketList.size();
             j++)
@@ -352,8 +358,10 @@ void controller::slotUpdateClientList(QList<QTcpSocket *> socketList)
                                       QString::number(socketList.at(j)->socketDescriptor()));
         }
     }
-    else
+    else{
         ui->CBclientList->addItem(tr("未有客户端连接"));
+        TCPServerHaveClient = 0;
+    }
 }
 
 //when clicking 连接button
@@ -1095,8 +1103,13 @@ void controller::on_CBopenFile_toggled(bool checked)
 
 void controller::slotSendOpenFile(QByteArray line)
 {
-    ui->EtextSend->setText(QString(line));
-    sendMessage();
+    //ui->EtextSend->setText(QString(line));
+    //sendMessage();
+
+    if(ui->RBsendZoneClient->isChecked())
+        emit SsendClientMsg(line);
+    else
+        emit SsendServerMsg(line, ui->CBclientList->currentIndex());
 }
 
 void controller::on_RBsendZoneServer_toggled(bool checked)

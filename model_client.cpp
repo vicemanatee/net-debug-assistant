@@ -36,7 +36,7 @@ void model_client::client()//connect
 void model_client::sendClientMessage()
 {
     m_c->write(msg);
-    //qDebug()<<"client send Thread"<<QThread::currentThread();
+    qDebug()<<"client send Thread"<<QThread::currentThread();
 }
 
 void model_client::getServerMessage()
