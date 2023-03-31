@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>252</width>
-    <height>227</height>
+    <width>272</width>
+    <height>280</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -37,6 +37,77 @@
      </widget>
     </item>
     <item>
+     <widget class="QGroupBox" name="groupBox">
+      <property name="title">
+       <string>发送基准</string>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_3">
+       <item>
+        <widget class="QRadioButton" name="RBsendBaseOnReceive">
+         <property name="text">
+          <string>接收记录</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QRadioButton" name="RBsendBaseOnSend">
+         <property name="text">
+          <string>发送记录</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_4">
+      <item>
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>发送速度：</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="CBrepeadSpead">
+        <item>
+         <property name="text">
+          <string>1倍</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>2倍</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>4倍</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>8倍</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>16倍</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>32倍</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
        <widget class="QPushButton" name="Bconfirm">
@@ -64,7 +135,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>252</width>
+     <width>272</width>
      <height>17</height>
     </rect>
    </property>

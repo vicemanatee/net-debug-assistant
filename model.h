@@ -31,12 +31,11 @@ public:
     model(QObject *parent = 0);
 
     unsigned short port;
-    QByteArray clientMessage;
     QByteArray serverMessage;
     QByteArray msg;
     QString ip;
 
-    void activateListen();
+
     void sendServerMessage(int index);
     tcpServer* m_s;
 
@@ -58,13 +57,17 @@ signals:
     void SstartListening();
     void SnewMessage(QByteArray);
     void SsocketListUpdate(QList<QTcpSocket*>);
+    void SserverClose();
 
 public slots:
+    void activateListen();
     void clientDisconnected(qintptr socketDescriptor);
+    void serverClose();
+    void slotSendServerMessage(QByteArray message, int index);
 
 private slots:
     void getClientMessage(QByteArray clientMessage);
-    void receiveFile();
+    void receiveFile(QByteArray clientMessage);
     void newConnect(qintptr socketDescriptor);
 
 };

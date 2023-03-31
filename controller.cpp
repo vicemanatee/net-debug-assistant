@@ -5,43 +5,91 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QTextBlock>
-#include <malloc.h>
+#include <QDateTime>
 
 controller::controller(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::controller)
 {
+    //recordState = 0: not recording
+    //recordState = 1: recording
+    recordState = 0;
+
+    //TcpServerHasClient =0: has not client
+    //...=1: has client
+    TcpServerHasClient = 0;
 
     head = "$$$$^";
 
-    timeFormat = "hh:mm:ss.zzz";
+    timeFormat = "yyyy.mm.dd hh:mm:ss.zzz";
 
-
-    time = "[" + QTime::currentTime().toString(timeFormat) + "] ";
     qDebug()<<"main thread"<<QThread::currentThread();
 
-
+//------------------------------SERVER MODEL----------------------------------------
     SCmodel = new model(this);
+/*----------server subthread----------------
+    QThread* serverThread = new QThread;
+    SCmodel->moveToThread(serverThread);
+    serverThread->start();*/
+
+    //start listening
+    connect(this, &controller::STcpServerStartListening,
+            SCmodel, &model::activateListen);
+    //send server message
+    connect(this, &controller::SsendServerMsg,
+            SCmodel, &model::slotSendServerMessage);
+    //get client message
     connect(SCmodel, &model::SgetClientMessage,
             this, &controller::outputClientMessage);
-    /*connect(SCmodel->m_tcp, &QTcpSocket::disconnected,
-            this, [=](){
-        qDebug()<<"m_tcp Connected";
-    });*/
+    //server close
+    connect(this, &controller::STcpServerclose,
+            SCmodel, &model::serverClose);
+    //changes on view when server start listening
+    connect(SCmodel, &model::SstartListening,
+            this, &controller::slotViewChangeTcpServerStartListening);
+    //changes on view when server close
+    connect(SCmodel, &model::SserverClose,
+            this, &controller::slotViewChangeTcpServerClose);
 
-
+//-------------------------------CLIENT MODEL----------------------------------------
     Cmodel = new model_client;
+/*-----------client subthread---------------
+    QThread* clientThread = new QThread;
+    Cmodel->moveToThread(clientThread);
+    clientThread->start();*/
+
+    //connect to server
+    connect(this, &controller::STcpClientConnectStartConnect,
+            Cmodel, &model_client::client);
+    //send client message
+    connect(this, &controller::SsendClientMsg,
+            Cmodel, &model_client::slotSendClientMessage);
+    //get server message
+    connect(Cmodel, &model_client::SgetServerMessage,
+            this, &controller::outputServerMessage);
     //when click sendFile button, initial sendfile class
     connect(this, &controller::SsendFile,
             Cmodel, &model_client::initialSendFile);
-    connect(Cmodel, &model_client::SgetServerMessage,
-            this, &controller::outputServerMessage);
+    //disconnect from server
+    connect(this, &controller::SclientDisconnectFromServer,
+            Cmodel, &model_client::serverDisconnected);
+    //change on view when client connect successful
+    connect(Cmodel->m_c, &QTcpSocket::connected,
+            this, &controller::slotTCPClientConnectSuccess);
+    //change on view when client disconnect
+    connect(Cmodel->m_c, &QTcpSocket::disconnected,
+            this, &controller::slotTCPClientDisconnect);
 
-
+//---------------------------------UDP MODEL--------------------------------------
     udpClient = new model_UDPconnnect;
 
-
     ui->setupUi(this);
+
+//---------------------------------disable function--------------------------------
+    //send on time button
+    ui->BsendOnTime->setVisible(false);
+    //add head function
+    ui->CBsendAddHead->setVisible(false);
 }
 
 controller::~controller()
@@ -49,7 +97,6 @@ controller::~controller()
     delete ui;
 }
 
-//---------------------------this should be view!!!!!!!!!!!-----------------------------
 //output client message
 void controller::outputClientMessage(QByteArray msg)
 {
@@ -57,14 +104,18 @@ void controller::outputClientMessage(QByteArray msg)
     if (ui->CBsendAddHead->isChecked() == false)
 //not adding head
     {
-        dialogHistory.append("[" + QTime::currentTime().toString(timeFormat) + "] "
-                             + tr("Client:")+ msg.toHex() + "\n");
+        dialogHistory.append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                             + tr("Receive Client Message:")+ msg.toHex() + "\n");
+        emit SdialogSaveUpdate("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                               + tr("Receive Client Message:")+ msg.toHex() + "\n");
         if(ui->RBreceiveSetAsc->isChecked())
         //appear ASC
-            ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("Client:") + QString(msg));
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " +
+                                tr("Receive Client Message: ") + QString(msg));
         else
         //apear HEX
-            ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("Client:") + msg.toHex());
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " +
+                                tr("Receive Client Message: ") + msg.toHex());
     }
     else{
 //adding head
@@ -80,11 +131,11 @@ void controller::outputClientMessage(QByteArray msg)
             {
                 //apear in ASCII
                 if (ui->RBreceiveSetAsc->isChecked())
-                    ui->Edialog->append("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + tr("Client:") + realMsg.toUtf8() + "|" +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString("hh:mm:ss.zzz") + "] " + tr("Client:") + realMsg.toUtf8() + "|" +
                                 tr("信息长度") + QString::number(lengthOfget));
                 else
                 //apear in HEX
-                    ui->Edialog->append("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + tr("Client:") + realMsg.toUtf8().toHex() + "|" +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString("hh:mm:ss.zzz") + "] " + tr("Client:") + realMsg.toUtf8().toHex() + "|" +
                                 tr("信息长度") + QString::number(lengthOfget));
             }
             else
@@ -92,7 +143,7 @@ void controller::outputClientMessage(QByteArray msg)
         }
         else
             ui->Edialog->append(tr("error!!!客户端信息遗失"));
-    }
+        }
     }
 }
 
@@ -103,14 +154,16 @@ void controller::outputServerMessage()
     if (ui->CBsendAddHead->isChecked() == false)
 //not adding head
     {
-        dialogHistory.append("[" + QTime::currentTime().toString(timeFormat) + "] "
-                + tr("Server:") + Cmodel->serverMessage.toHex() + "\n");
+        dialogHistory.append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                + tr("Receive Server Message:") + Cmodel->serverMessage.toHex() + "\n");
+        emit SdialogSaveUpdate("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                               + tr("Receive Server Message:") + Cmodel->serverMessage.toHex() + "\n");
         if (ui->RBreceiveSetAsc->isChecked())
-            ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] "
-                                + tr("Server:") + QString(Cmodel->serverMessage));
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                + tr("Receive Server Message: ") + QString(Cmodel->serverMessage));
         else
-            ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] "
-                                + tr("Server:") + Cmodel->serverMessage.toHex());
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                + tr("Receive Server Message: ") + Cmodel->serverMessage.toHex());
     }
     else{
 //adding head
@@ -123,11 +176,11 @@ void controller::outputServerMessage()
             {
                 //apear in ASCII
                 if (ui->RBreceiveSetAsc->isChecked())
-                    ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("Server:") + realMsg + "|" +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("Server:") + realMsg + "|" +
                                 tr("信息长度") + QString::number(lengthOfget));
                 else
                 //apear in HEX
-                    ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("Server:") + realMsg.toUtf8().toHex() + "|" +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("Server:") + realMsg.toUtf8().toHex() + "|" +
                                 tr("信息长度") + QString::number(lengthOfget));
             }
             else
@@ -150,15 +203,33 @@ void controller::on_BnetSetPasteHostIP_clicked()
     ui->LElocalHostAdd->paste();
 }
 
+//save dialog to txt
 void controller::on_CBrecepSetSaveDialog_clicked()
 {
-    Qt::CaseSensitivity cs = ui->CBrecepSetSaveDialog->isChecked()?
-                Qt::CaseSensitive:Qt::CaseInsensitive;
-    ui->BrecepSetSaveDialog->setEnabled(cs == Qt::CaseSensitive);
+    if (ui->CBrecepSetSaveDialog->isChecked()){
+        ui->BrecepSetSaveDialog->setEnabled(true);
+        connect(this, &controller::SdialogSaveUpdate,
+                this, &controller::slotAutoSaveDialog);
+    }
+    else{
+        ui->BrecepSetSaveDialog->setEnabled(false);
+        disconnect(this, &controller::SdialogSaveUpdate,
+                   this, &controller::slotAutoSaveDialog);
+    }
+}
+
+void controller::slotAutoSaveDialog(QString updateInfo)
+{
+    if (saveDialogFilePath != ""){
+        QFile file(saveDialogFilePath);
+        file.open(QFile::Append);
+        file.write(updateInfo.toUtf8());
+    }
 }
 
 void controller::on_BrecepSetSaveDialog_clicked()
 {
+    int fileAvailable = 0;
     QString fileName = QFileDialog::getSaveFileName(
                 this,
                 tr("Save File"),
@@ -171,6 +242,7 @@ void controller::on_BrecepSetSaveDialog_clicked()
             QMessageBox::critical(this, tr("错误"),tr("无法写入该文件"));
         }
         else{
+            fileAvailable = 1;
             QTextStream stream(&file);
             stream<<"THIS IS MAX DIALOG\n";
             stream<<dialogHistory;
@@ -178,6 +250,9 @@ void controller::on_BrecepSetSaveDialog_clicked()
             file.close();
         }
     }
+
+    if (fileAvailable == 1)
+        saveDialogFilePath = fileName;
 }
 
 void controller::on_LEsendSetrepPeriod_textChanged()
@@ -252,78 +327,118 @@ void controller::on_BcleanSend_clicked()
 //activate listen
 void controller::on_BactivateListen_clicked()
 {
+    if (! SCmodel->m_s->isListening()){
+    //start Listening
+        emit STcpServerStartListening();
+        connect(SCmodel, &model::SsocketListUpdate,
+                this, &controller::slotUpdateClientList);
+    }
+    else{
+    //close Listening
+        emit STcpServerclose();
+        disconnect(SCmodel, &model::SsocketListUpdate,
+                   this, &controller::slotUpdateClientList);
+    }
+}
 
-    /*SCmodel = new model(this);
-    connect(SCmodel, &model::SgetClientMessage,
-            this, &controller::outputClientMessage);*/
-    connect(SCmodel, &model::SstartListening,
-            this, [=](){
-        ui->BactivateListen->setEnabled(false);
-        ui->BactivateListen->setText(tr("监听已启动"));
-        ui->CBtypePro->setEnabled(false);
-        ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + "TCPServer start listening");
-    });
-    SCmodel->activateListen();
-
-    connect(SCmodel, &model::SsocketListUpdate,
-            this, [=](QList<QTcpSocket*> socketList){
-        ui->CBclientList->clear();
-        if(socketList.size() != 0){
-            ui->CBclientList->addItem(tr("所有客户端共") +
-                                      QString::number(socketList.size()) + tr("台"));
-            for(int j = 0;
-                j < socketList.size();
-                j++)
-            {
-                ui->CBclientList->addItem(socketList.at(j)->peerAddress().toString().section(':', -1, -1) + " " +
-                                          QString::number(socketList.at(j)->peerPort()) + " " +
-                                          QString::number(socketList.at(j)->socketDescriptor()));
-            }
+void controller::slotUpdateClientList(QList<QTcpSocket *> socketList)
+{
+    ui->CBclientList->clear();
+    if(socketList.size() != 0){
+        TcpServerHasClient = 1;
+        ui->CBclientList->addItem(tr("所有客户端共") +
+                                  QString::number(socketList.size()) + tr("台"));
+        for(int j = 0;
+            j < socketList.size();
+            j++)
+        {
+            ui->CBclientList->addItem(socketList.at(j)->peerAddress().toString().section(':', -1, -1) + " " +
+                                      QString::number(socketList.at(j)->peerPort()) + " " +
+                                      QString::number(socketList.at(j)->socketDescriptor()));
         }
-        else
-            ui->CBclientList->addItem(tr("未有客户端连接"));
-    });
+    }
+    else{
+        TcpServerHasClient = 0;
+        ui->CBclientList->addItem(tr("未有客户端连接"));
+    }
 }
 
 //when clicking 连接button
 void controller::on_BsendSetConnect_clicked()
 {
-    /*Cmodel = new model_client;
-    //when click sendFile button, initial sendfile class
-    connect(this, &controller::SsendFile,
-            Cmodel, &model_client::initialSendFile);
-    connect(Cmodel, &model_client::SgetServerMessage,
-            this, &controller::outputServerMessage);*/
-    Cmodel->client();
-    Cmodel->m_c->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, 1024*1024);
-    //qDebug()<<"client Socket send buffer size"<<Cmodel->m_c->socketOption(QAbstractSocket::SendBufferSizeSocketOption);
+    emit STcpClientConnectStartConnect();
+    //Cmodel->m_c->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, 1024*1024);
+}
 
-
-    connect(Cmodel->m_c, &QTcpSocket::connected,
-            this, [=](){
-        ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " +
-                            tr("TCP Client:connect to the server"));
-        qDebug()<<Cmodel->m_c->socketDescriptor();
-        ui->BsendSetBreak->setEnabled(true);
-        ui->BsendSetConnect->setEnabled(false);
+void controller::slotTCPClientConnectSuccess()
+{
+    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " +
+                        tr("TCPClient State: CONNECT"));
+    qDebug()<<Cmodel->m_c->socketDescriptor();
+    ui->BsendSetBreak->setEnabled(true);
+    ui->BsendSetConnect->setEnabled(false);
+    if(ui->RBsendZoneClient->isChecked()){
         ui->LElocalHostAdd->setEnabled(false);
         ui->LElocalHostPort->setEnabled(false);
-    });
-    connect(Cmodel->m_c, &QTcpSocket::disconnected,
-            this, [=](){
-        ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " +
-                            tr("TCP Client:disconnect from the server"));
-        ui->BsendSetConnect->setEnabled(true);
-        ui->BsendSetBreak->setEnabled(false);
+    }
+}
+
+void controller::slotTCPClientDisconnect()
+{
+    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " +
+                        tr("TCPClient State: DISCONNECT"));
+
+    ui->BsendSetConnect->setEnabled(true);
+    ui->BsendSetBreak->setEnabled(false);
+    if(ui->RBsendZoneClient->isChecked()){
         ui->LElocalHostAdd->setEnabled(true);
         ui->LElocalHostPort->setEnabled(true);
-    });
+    }
+}
+
+void controller::slotViewChangeTcpServerStartListening()
+{
+    ui->CBclientList->clear();
+    ui->CBclientList->addItem(tr("未客户端连接"));
+    ui->CBclientList->setEnabled(true);
+    qDebug()<<"server state"<<SCmodel->m_s->isListening();
+    if (SCmodel->m_s->isListening())
+        TCPServerState = "LISTEN";
+    else
+        TCPServerState = "CLOSE";
+    ui->BactivateListen->setText(tr("关闭服务器"));
+    ui->CBtypePro->setEnabled(false);
+
+    if(ui->RBsendZoneServer->isChecked())
+        ui->LElocalHostPort->setEnabled(false);
+
+    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) +
+                        "] " + "TCPServer State: " + TCPServerState);
+}
+
+void controller::slotViewChangeTcpServerClose()
+{
+    ui->CBclientList->clear();
+    ui->CBclientList->addItem(tr("服务器未监听"));
+    ui->CBclientList->setEnabled(false);
+    qDebug()<<"server state"<<SCmodel->m_s->isListening();
+    if (SCmodel->m_s->isListening())
+        TCPServerState = "LISTEN";
+    else
+        TCPServerState = "CLOSE";
+    ui->BactivateListen->setText(tr("启动监听"));
+    ui->CBtypePro->setEnabled(true);
+
+    if(ui->RBsendZoneServer->isChecked())
+        ui->LElocalHostPort->setEnabled(true);
+
+    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) +
+                        "] " + "TCPServer State: " + TCPServerState);
 }
 
 //disconnection
 void controller::on_BsendSetBreak_clicked()
 {
-    Cmodel->serverDisconnected();
     emit SclientDisconnectFromServer();
 }
 
@@ -405,7 +520,7 @@ void controller::sendMessage()
         changeHexToAsc(tempInput.simplified(), tempData);
         tempInput = QString(tempData);
     }
-    qDebug()<<"send message"<<tempInput;
+    //qDebug()<<"send message"<<tempInput;
 
     //start sending
     if(ui->CBtypePro->currentText() == "TCP"){//send by TCP
@@ -417,15 +532,21 @@ void controller::sendMessage()
             {
                 if (ui->CBsendAddHead->isChecked() == false){
                 //not adding head
-                    Cmodel->msg = tempInput.toUtf8();
-                    Cmodel->sendClientMessage();
+                    emit SsendClientMsg(tempInput.toUtf8());
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                        + tr("Send by Client: ") + tempInput);
+                    dialogHistory.append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                            + tr("Send by Client:") + tempInput.toUtf8().toHex() + "\n");
+                    emit SdialogSaveUpdate("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                           + tr("Send by Client:") + tempInput.toUtf8().toHex() + "\n");
                 }
                 else{
                 //adding head to text
                     QString temp = head + QString::number(tempInput.length())
                             + "|" + tempInput;
-                    Cmodel->msg = temp.toUtf8();
-                    Cmodel->sendClientMessage();
+                    emit SsendClientMsg(temp.toUtf8());
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                        + tr("Send by Client: ") + tempInput);
                 }
             }
             else
@@ -440,23 +561,37 @@ void controller::sendMessage()
             if (ui->CBsendAddHead->isChecked() == false)
             {
             //no head
-                SCmodel->msg = tempInput.toUtf8();
-                SCmodel->sendServerMessage(ui->CBclientList->currentIndex());
+                emit SsendServerMsg(tempInput.toUtf8(), ui->CBclientList->currentIndex());
+
+                ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                    + tr("Send by Server: ") + tempInput);
+                dialogHistory.append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                        + tr("Send by Server:") +tempInput.toUtf8().toHex() + "\n");
+                emit SdialogSaveUpdate("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                       + tr("Send by Server:") +tempInput.toUtf8().toHex() + "\n");
             }
             else
             //add head head int(size) text
             {
                 QString temp = head + QString::number(tempInput.length())
                         + "|" + tempInput;
-                SCmodel->msg = temp.toUtf8();
-                SCmodel->sendServerMessage(ui->CBclientList->currentIndex());
+                emit SsendServerMsg(temp.toUtf8(), ui->CBclientList->currentIndex());
+
+                ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                    + tr("Send by Server: ") + tempInput);
             }
         }
     }
     else{//send by UDP
         if(ui->CBsendAddHead->isChecked() == false){
+        //not adding head
             emit SsendUdpMsg(tempInput);
-            ui->Edialog->append(tr("send Message by UDP：") + tempInput);
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                + tr("Send by UDP：") + tempInput);
+            dialogHistory.append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                    + tr("Send by UDP:") + tempInput.toUtf8().toHex() + "\n");
+            emit SdialogSaveUpdate("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                                   + tr("Send by UDP:") +tempInput.toUtf8().toHex() + "\n");
         }
         else{
             QString temp = head + QString::number(tempInput.length())
@@ -464,7 +599,6 @@ void controller::sendMessage()
             emit(SsendUdpMsg(temp));
             ui->Edialog->append(tr("send Messsage by UDP：") + temp);
         }
-
     }
 }
 
@@ -494,27 +628,15 @@ void controller::on_RBsendSelHEX_toggled()
 //click sendButton
 void controller::on_Bsend_clicked()
 {
-    sendMessage();
-}
-
-//change ui appearance
-void controller::on_RBsendZoneClient_toggled()
-{
-    if(ui->RBsendZoneClient->isChecked())
+    if(ui->CBopenFile->isChecked())
+    //open file and send
     {
-        ui->Lip->setText(tr("远程主机地址"));
-        ui->Lport->setText(tr("远程主机端口"));
+        qDebug()<<"send open file";
+        emit SsendOpenFile(openFilePath);
     }
-}
-
-void controller::on_RBsendZoneServer_toggled()
-{
-    if(ui->RBsendZoneServer->isChecked())
-    {
-        ui->Lip->setText(tr("本地主机地址"));
-        ui->Lport->setText(tr("本地主机端口"));
-    }
-
+    else
+    //send simple message
+        sendMessage();
 }
 
 //send message on time
@@ -708,27 +830,27 @@ void controller::on_BclearSearch_clicked()
     ui->Edialog->setTextCursor(cursor);
 }
 
-//--------------------------TCP-server initialization uncomplete--------------------
-void controller::on_BserverInitial_clicked()
-{
-}
-
 //input host and ip
 void controller::on_LElocalHostAdd_textChanged(const QString &arg1)
 {
     if(ui->CBtypePro->currentText() == "TCP")
-        Cmodel->ip = arg1;
-    else
+    {
+        if(ui->RBsendZoneClient->isChecked())
+            Cmodel->ip = arg1;
+    }
+    else if(ui->CBtypePro->currentText() == "UDP")
         udpClient->ip = arg1;
 }
 
 void controller::on_LElocalHostPort_textChanged(const QString &arg1)
 {
     if(ui->CBtypePro->currentText() == "TCP"){
-        SCmodel->port = arg1.toInt();
-        Cmodel->port = arg1.toInt();
+        if (ui->RBsendZoneServer->isChecked())
+            SCmodel->port = arg1.toInt();
+        else if(ui->RBsendZoneClient->isChecked())
+            Cmodel->port = arg1.toInt();
     }
-    else
+    else if(ui->CBtypePro->currentText() == "UDP")
         udpClient->port = arg1.toInt();
 }
 
@@ -737,37 +859,94 @@ void controller::on_CBtypePro_currentIndexChanged(const QString &arg1)
 {
     if(arg1 == "UDP")
     {
+    //protocal type change to UDP
         ui->BactivateListen->setEnabled(false);
         ui->LElocalHostAdd->setText(tr("192.168.1.25"));
         ui->BsendSetBreak->setEnabled(true);
         ui->CBclientList->setEnabled(false);
         ui->LEcastSelect->setEnabled(false);
+        ui->GBsendSideSelect->setEnabled(false);
+        ui->GBrecordSideSelect->setEnabled(false);
+        ui->LElocalHostAdd->setEnabled(true);
 
         connect(this, &controller::SsendUdpMsg,
                 udpClient, &model_UDPconnnect::sendMsg);
         connect(udpClient, &model_UDPconnnect::getUdpMsg,
                 this, &controller::getUPDMsg);
 
+        disconnect(this, &controller::STcpServerStartListening,
+                  SCmodel, &model::activateListen);
+        disconnect(this, &controller::SsendServerMsg,
+                  SCmodel, &model::slotSendServerMessage);
         disconnect(SCmodel, &model::SgetClientMessage,
-                this, &controller::outputClientMessage);
+                  this, &controller::outputClientMessage);
+        disconnect(this, &controller::STcpServerclose,
+                  SCmodel, &model::serverClose);
+        disconnect(SCmodel, &model::SstartListening,
+                  this, &controller::slotViewChangeTcpServerStartListening);
+        disconnect(SCmodel, &model::SserverClose,
+                  this, &controller::slotViewChangeTcpServerClose);
+
+        disconnect(this, &controller::STcpClientConnectStartConnect,
+                  Cmodel, &model_client::client);
+        disconnect(this, &controller::SsendClientMsg,
+                  Cmodel, &model_client::slotSendClientMessage);
         disconnect(Cmodel, &model_client::SgetServerMessage,
-                this, &controller::outputServerMessage);
+                  this, &controller::outputServerMessage);
         disconnect(this, &controller::SsendFile,
-                Cmodel, &model_client::initialSendFile);
+                  Cmodel, &model_client::initialSendFile);
+        disconnect(this, &controller::SclientDisconnectFromServer,
+                  Cmodel, &model_client::serverDisconnected);
+        disconnect(Cmodel->m_c, &QTcpSocket::connected,
+                  this, &controller::slotTCPClientConnectSuccess);
+        disconnect(Cmodel->m_c, &QTcpSocket::disconnected,
+                  this, &controller::slotTCPClientDisconnect);
     }
     else
     {
+    //protocal type change to TCP
         ui->BactivateListen->setEnabled(true);
-        ui->LElocalHostAdd->setText(tr("127.0.0.1"));
+        if(ui->RBsendZoneClient->isChecked())
+            ui->LElocalHostAdd->setText(tr("127.0.0.1"));
+        else
+        {
+            ui->LElocalHostAdd->setText("HostAddress: ANY");
+            ui->LElocalHostAdd->setEnabled(false);
+        }
         ui->CBclientList->setEnabled(true);
         ui->LEcastSelect->setEnabled(true);
+        ui->GBsendSideSelect->setEnabled(true);
+        ui->GBrecordSideSelect->setEnabled(true);
 
+        connect(this, &controller::STcpServerStartListening,
+                SCmodel, &model::activateListen);
+        connect(this, &controller::SsendServerMsg,
+                SCmodel, &model::slotSendServerMessage);
         connect(SCmodel, &model::SgetClientMessage,
                 this, &controller::outputClientMessage);
+        connect(this, &controller::STcpServerclose,
+                SCmodel, &model::serverClose);
+        connect(SCmodel, &model::SstartListening,
+                this, &controller::slotViewChangeTcpServerStartListening);
+        connect(SCmodel, &model::SserverClose,
+                this, &controller::slotViewChangeTcpServerClose);
+
+        connect(this, &controller::STcpClientConnectStartConnect,
+                Cmodel, &model_client::client);
+        connect(this, &controller::SsendClientMsg,
+                Cmodel, &model_client::slotSendClientMessage);
         connect(Cmodel, &model_client::SgetServerMessage,
                 this, &controller::outputServerMessage);
         connect(this, &controller::SsendFile,
                 Cmodel, &model_client::initialSendFile);
+        connect(this, &controller::SclientDisconnectFromServer,
+                Cmodel, &model_client::serverDisconnected);
+        connect(Cmodel->m_c, &QTcpSocket::connected,
+                this, &controller::slotTCPClientConnectSuccess);
+        connect(Cmodel->m_c, &QTcpSocket::disconnected,
+                this, &controller::slotTCPClientDisconnect);
+
+
         disconnect(this, &controller::SsendUdpMsg,
                    udpClient, &model_UDPconnnect::sendMsg);
         disconnect(udpClient, &model_UDPconnnect::getUdpMsg,
@@ -780,12 +959,17 @@ void controller::getUPDMsg(QString str)
     if (ui->CBsendAddHead->isChecked() == false)
 //not adding head
     {
+        dialogHistory.append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                             + tr("Receive UDP Message:")+ str.toUtf8().toHex() + "\n");
+        emit SdialogSaveUpdate("[" + QDateTime::currentDateTime().toString(timeFormat) + "] "
+                               + tr("Receive UDP Message:")+ str.toUtf8().toHex() + "\n");
+
         if(ui->RBreceiveSetAsc->isChecked())
         //appear ASC
-            ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + str);
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + str);
         else
         //apear HEX
-            ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + str.toLatin1().toHex());
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + str.toLatin1().toHex());
     }
     else{
 //adding head
@@ -801,11 +985,11 @@ void controller::getUPDMsg(QString str)
             {
                 //apear in ASCII
                 if (ui->RBreceiveSetAsc->isChecked())
-                    ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + realMsg.toUtf8() + " " +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + realMsg.toUtf8() + " " +
                                 tr("信息长度") + QString::number(lengthOfget));
                 else
                 //apear in HEX
-                    ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + realMsg.toUtf8().toHex() + " " +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + realMsg.toUtf8().toHex() + " " +
                                 tr("信息长度") + QString::number(lengthOfget));
             }
             else
@@ -823,13 +1007,13 @@ void controller::on_BsendByDialog_clicked()
     connect(sendDialog, &sendByDialog::sendInformation,
             this, &controller::repeatDialog);
     connect(sendDialog, &sendByDialog::SopenRightDialog,
-            this,[=](QTime time){
-        ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " +
+            this,[=](QDateTime time){
+        ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " +
                             tr("Going to repeat dialog starting at ") + '[' + time.toString(timeFormat) + ']');
     });
     connect(sendDialog, &sendByDialog::SrepeatComplete,
             this,[=](){
-        ui->Edialog->append("[" + QTime::currentTime().toString(timeFormat) + "] " +
+        ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " +
                             tr("Dialog read Complete"));
     });
     connect(sendDialog, &sendByDialog::SopenWrongDialog,
@@ -839,7 +1023,7 @@ void controller::on_BsendByDialog_clicked()
         sendDialog->close();
         disconnect(sendDialog,&sendByDialog::sendInformation,
                    this, &controller::repeatDialog);
-        disconnect(sendDialog->dialogRead, &readDialog::warningNotMyDialog,
+        disconnect(sendDialog, &sendByDialog::SopenWrongDialog,
                    this, &controller::repeatNotMyDialog);
     });
     sendDialog->show();
@@ -847,41 +1031,46 @@ void controller::on_BsendByDialog_clicked()
 
 void controller::repeatDialog(QString side, QString content)
 {
-
-    if(side == " Server" )
-    {//send from server
-        if (ui->CBsendAddHead->isChecked() == false)
-        {
-        //no head
-            SCmodel->msg = content.toUtf8();
-            SCmodel->sendServerMessage(ui->CBclientList->currentIndex());
-            qDebug()<<"going to send dialog"<<content;
+    if(ui->CBtypePro->currentText() == "TCP"){
+        if(side == " Server" )
+        {//send from server
+            if (ui->CBsendAddHead->isChecked() == false)
+            {
+            //no head
+                emit SsendServerMsg(content.toUtf8(), ui->CBclientList->currentIndex());
+                qDebug()<<"going to send dialog"<<content;
+            }
+            else
+            //add head head int(size) text
+            {
+                QString temp = head + QString::number(content.length())
+                        + "|" + content;
+                SCmodel->msg = temp.toUtf8();
+                SCmodel->sendServerMessage(ui->CBclientList->currentIndex());
+                qDebug()<<"Text";
+            }
         }
-        else
-        //add head head int(size) text
+        else if(side == " Client" && Cmodel->m_c->state() == QAbstractSocket::ConnectedState)
         {
-            QString temp = head + QString::number(content.length())
-                    + "|" + content;
-            SCmodel->msg = temp.toUtf8();
-            SCmodel->sendServerMessage(ui->CBclientList->currentIndex());
-            qDebug()<<"Text";
+            if (ui->CBsendAddHead->isChecked() == false){
+            //not adding head
+                emit SsendClientMsg(content.toUtf8());
+                qDebug()<<"going to send dialog"<<content;
+            }
+            else{
+            //adding head to text
+                QString temp = head + QString::number(content.length())
+                        + "|" + content;
+                Cmodel->msg = temp.toUtf8();
+                Cmodel->sendClientMessage();
+            }
         }
     }
-    else if(side == " Client" && Cmodel->m_c->state() == QAbstractSocket::ConnectedState)
+    else if(ui->CBtypePro->currentText() == "UDP")
     {
-        if (ui->CBsendAddHead->isChecked() == false){
-        //not adding head
-            Cmodel->msg = content.toUtf8();
-            Cmodel->sendClientMessage();
-            qDebug()<<"going to send dialog"<<content;
-        }
-        else{
-        //adding head to text
-            QString temp = head + QString::number(content.length())
-                    + "|" + content;
-            Cmodel->msg = temp.toUtf8();
-            Cmodel->sendClientMessage();
-        }
+        if (side == " UDP")
+            emit SsendUdpMsg(content);
+        qDebug()<<"going to send Dialog"<<content;
     }
 }
 
@@ -894,4 +1083,165 @@ void controller::repeatNotMyDialog()
                this, &controller::repeatDialog);
     disconnect(sendDialog->dialogRead, &readDialog::warningNotMyDialog,
                this, &controller::repeatNotMyDialog);
+}
+
+//record message
+void controller::on_PBrecordHistory_clicked()
+{
+    if (recordState == 0)
+    {
+    //start recording
+        recordFilePath = QFileDialog::getOpenFileName();
+        if (recordFilePath == "")
+        {
+            QMessageBox::warning(this, "打开文件", "选择的文件路径不能为空");
+            return;
+        }
+        ui->PBrecordHistory->setText(tr("停止录制"));
+        recordState = 1;
+        ui->GBrecordSideSelect->setEnabled(false);
+        if(ui->CBtypePro->currentText() == "TCP"){
+            if (ui->RBrecordSideSelectClient->isChecked())
+            //record client message
+                connect(Cmodel, &model_client::SgetServerMessage,
+                        this,&controller::slotRecordMsg);
+            else
+                connect(SCmodel, &model::SgetClientMessage,
+                        this, &controller::slotRecordMsg);
+        }
+        else
+        {
+            connect(udpClient, &model_UDPconnnect::getUdpMsg,
+                    this, [=](QString msg){
+                emit SrecordUDPMessage(msg.toUtf8());
+            });
+            connect(this, &controller::SrecordUDPMessage,
+                    this, &controller::slotRecordMsg);
+        }
+    }
+    else
+    {
+    //stop recording
+        ui->PBrecordHistory->setText(tr("开始录制"));
+        recordState = 0;
+        ui->GBrecordSideSelect->setEnabled(true);
+        if(ui->CBtypePro->currentText() == "TCP"){
+            if (ui->RBrecordSideSelectClient->isChecked())
+                disconnect(Cmodel, &model_client::SgetServerMessage,
+                        this,&controller::slotRecordMsg);
+            else
+                disconnect(SCmodel, &model::SgetClientMessage,
+                        this, &controller::slotRecordMsg);
+        }
+        else
+            disconnect(this, &controller::SrecordUDPMessage,
+                       this, &controller::slotRecordMsg);
+    }
+}
+
+void controller::slotRecordMsg(QByteArray msg)
+{
+    QFile file(recordFilePath);
+    file.open(QFile::Append);
+    file.write(msg.toHex());
+    file.close();
+}
+
+void controller::on_CBopenFile_toggled(bool checked)
+{
+    if(checked)
+    {
+        openFilePath = QFileDialog::getOpenFileName();
+        if (openFilePath.isEmpty())
+        {
+            QMessageBox::warning(this, "打开文件", "选择的文件路径不能为空");
+            return;
+        }
+        ui->EtextSend->setReadOnly(true);
+        ui->EtextSend->setText(openFilePath);
+        ui->GBsendSideSelect->setEnabled(false);
+        ui->GBsendSetInputType->setEnabled(false);
+
+        openFile = new sendFileInThread;
+        openFileThread = new QThread;
+        openFile->moveToThread(openFileThread);
+        openFileThread->start();
+        connect(this, &controller::SsendOpenFile,
+                openFile, &sendFileInThread::sendFile);
+        connect(openFile, &sendFileInThread::SreadTextLine,
+                this, &controller::slotSendOpenFile);
+        connect(openFile, &sendFileInThread::SfileSendSuccess,
+                this, [=](){
+            ui->EtextSend->setText(tr("文件读取完毕"));
+        });
+    }
+    else
+    {
+        ui->EtextSend->clear();
+        ui->EtextSend->setReadOnly(false);
+        ui->GBsendSideSelect->setEnabled(true);
+        ui->GBsendSetInputType->setEnabled(true);
+
+        disconnect(this, &controller::SsendOpenFile,
+                openFile, &sendFileInThread::sendFile);
+        disconnect(openFile, &sendFileInThread::SreadTextLine,
+                this, &controller::slotSendOpenFile);
+    }
+}
+
+void controller::slotSendOpenFile(QByteArray line)
+{
+    if(ui->CBtypePro->currentText() == "TCP"){
+        if(ui->RBsendZoneClient->isChecked()){
+            if(Cmodel->m_c->state() == QTcpSocket::ConnectedState)
+                emit SsendClientMsg(line);
+        }
+        else{
+            if(TcpServerHasClient == 1)
+                emit SsendServerMsg(line, ui->CBclientList->currentIndex());
+        }
+    }
+    else
+        emit SsendUdpMsg(QString(line));
+}
+
+void controller::on_RBsendZoneServer_toggled(bool checked)
+{
+    if(checked)
+    {
+        ui->Lip->setText(tr("本地主机地址"));
+        ui->Lport->setText(tr("本地监听端口"));
+
+        ui->LElocalHostAdd->setEnabled(false);
+        ui->LElocalHostAdd->setText("HostAddress: ANY");
+
+        ui->LElocalHostPort->setEnabled(true);
+        ui->LElocalHostPort->setText(QString::number(SCmodel->port));
+
+        ui->CBclientList->setEnabled(true);
+        if(TCPServerState == "LISTEN")
+            ui->LElocalHostPort->setEnabled(false);
+    }
+}
+
+void controller::on_RBsendZoneClient_toggled(bool checked)
+{
+    if(checked)
+    {
+        ui->Lip->setText(tr("远程主机地址"));
+        ui->Lport->setText(tr("远程主机端口"));
+
+        ui->LElocalHostAdd->setEnabled(true);
+        ui->LElocalHostAdd->setText(Cmodel->ip);
+
+        ui->LElocalHostPort->setEnabled(true);
+        ui->LElocalHostPort->setText(QString::number(Cmodel->port));
+
+        ui->CBclientList->setEnabled(false);
+        if (Cmodel->m_c->state() == QTcpSocket::ConnectedState)
+        {
+            ui->LElocalHostAdd->setEnabled(false);
+            ui->LElocalHostPort->setEnabled(false);
+        }
+    }
 }

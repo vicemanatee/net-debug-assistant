@@ -25,7 +25,7 @@ public:
     QByteArray msg;
     QByteArray serverMessage;
 
-    void client();//connect
+
     QTcpSocket* m_c;
     QThread* fileThread;
 
@@ -39,9 +39,11 @@ signals:
     void SsendFile(QString path);
 
 public slots:
+    void client();//connect
     void serverDisconnected();
     void sendClientMessage();
     void initialSendFile();
+    void slotSendClientMessage(QByteArray message);
 
 private slots:
     void getServerMessage();

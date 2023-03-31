@@ -20,24 +20,6 @@ void sendFileInThread::sendFile(QString path)
     int sendFileProgress;
     file.open(QFile::ReadOnly);
 
-    //read by line
-    /*while(!file.atEnd())
-    {
-        static int num = 0;
-        QByteArray line = file.readLine();
-        QString temp;
-        if(num == 0)
-            temp = "FILE&&&|" + QString::number(fileSize)+ '|' + QString(line);
-        else
-            temp = QString(line);
-        num += line.size();
-        lineCount++;
-        int percent = (num * 100 / fileSize);
-        emit ScurPercent(percent);
-        emit SreadTextLine(temp.toUtf8());
-        qDebug()<<"going to send"<<temp;
-    }*/
-
     double len = 0.5;
     QString startSendFile = "FILE&&&|" + QString::number(fileSize)
             + "|";
@@ -55,6 +37,7 @@ void sendFileInThread::sendFile(QString path)
 
         sendFileProgress = 100*sendSize/fileSize;
         emit ScurPercent(sendFileProgress);
+        QThread::sleep(1);
     }while(len > 0);
     emit SreadTextLine(finishSendFile.toUtf8());
 

@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <model_udpconnnect.h>
 #include <sendbydialog.h>
+#include <sendfileinthread.h>
 
 namespace Ui {
 class controller;
@@ -62,6 +63,8 @@ private slots:
 
     void on_CBrecepSetSaveDialog_clicked();
 
+    void slotAutoSaveDialog(QString updateInfo);
+
     void on_BrecepSetSaveDialog_clicked();
 
     //void on_LEsendSetrepPeriod_cursorPositionChanged(int arg1, int arg2);
@@ -94,10 +97,6 @@ private slots:
 
     void on_Bsend_clicked();
 
-    void on_RBsendZoneClient_toggled();
-
-    void on_RBsendZoneServer_toggled();
-
     void on_BsendOnTime_clicked();
 
     void on_CBsendSetrepPeriod_clicked();
@@ -107,8 +106,6 @@ private slots:
     void on_Bsearch_clicked();
 
     void on_BclearSearch_clicked();
-
-    void on_BserverInitial_clicked();
 
     void on_LElocalHostAdd_textChanged(const QString &arg1);
 
@@ -124,12 +121,54 @@ private slots:
 
     void repeatNotMyDialog();
 
+    void on_PBrecordHistory_clicked();
+
+    void slotRecordMsg(QByteArray msg);
+
+    void on_CBopenFile_toggled(bool checked);
+
+    void slotSendOpenFile(QByteArray line);
+
+    void slotUpdateClientList(QList<QTcpSocket*> socketList);
+
+    void on_RBsendZoneServer_toggled(bool checked);
+
+    void on_RBsendZoneClient_toggled(bool checked);
+
+    void slotTCPClientConnectSuccess();
+
+    void slotTCPClientDisconnect();
+
+    void slotViewChangeTcpServerStartListening();
+
+    void slotViewChangeTcpServerClose();
+
+
+
 signals:
+    void SsendClientMsg(QByteArray);
+
+    void SsendServerMsg(QByteArray, int);
 
     void SsendFile();
+
     void SsendRepeatTime(int);
+
     void SsendUdpMsg(QString);
+
     void SclientDisconnectFromServer();
+
+    void SdialogSaveUpdate(QString);
+
+    void SsendOpenFile(QString filePath);
+
+    void STcpServerStartListening();
+
+    void STcpServerclose();
+
+    void STcpClientConnectStartConnect();
+
+    void SrecordUDPMessage(QByteArray);
 
 private:
     model_UDPconnnect* udpClient;
@@ -157,6 +196,24 @@ private:
     QString timeFormat;
 
     QString dialogHistory;
+
+    QString saveDialogFilePath;
+
+    int recordState;
+
+    QString recordFilePath;
+
+    QString openFilePath;
+
+    sendFileInThread* openFile;
+
+    QThread* openFileThread;
+
+    QString TCPServerState;
+
+    QString TCPClientState;
+
+    int TcpServerHasClient;
 };
 
 

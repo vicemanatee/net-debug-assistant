@@ -23,9 +23,6 @@ void model::activateListen()
 
 void model::getClientMessage(QByteArray clientMessage)
 {
-
-    //qDebug()<<"get clientMessage Size"<<clientMessage.size();
-    qDebug()<<"get client message"<<QString(clientMessage);
     if(QString(clientMessage).startsWith("FILE&&&")){
         sendFileMode = 1;
         receiveFileSize = 0;
@@ -35,7 +32,7 @@ void model::getClientMessage(QByteArray clientMessage)
         if(sendFileMode == 0)
             emit SgetClientMessage(clientMessage);
         else
-            receiveFile();
+            receiveFile(clientMessage);
     }
 }
 
@@ -62,12 +59,32 @@ void model::clientDisconnected(qintptr socketDescriptor)
     for(int j = 0;
         j < socketList.size();
         j++){
-        if (socketList.at(j)->socketDescriptor() == -1)
+        if (socketList.at(j)->socketDescriptor() == socketDescriptor)
             socketList.removeAt(j);
     }
+    emit SsocketListUpdate(socketList);
 }
 
-void model::receiveFile()
+void model::serverClose()
+{
+    for (int j = 0;
+         j < socketList.size();
+         j++){
+        socketList.at(j)->disconnectFromHost();
+        socketList.removeAt(j);
+    }
+    emit SsocketListUpdate(socketList);
+    m_s->close();
+    emit SserverClose();
+}
+
+void model::slotSendServerMessage(QByteArray message, int index)
+{
+    msg = message;
+    sendServerMessage(index);
+}
+
+void model::receiveFile(QByteArray clientMessage)
 {
     receiveFileSize += clientMessage.size();
     QFile* file = new QFile("receive file from client.txt");
@@ -101,24 +118,34 @@ void model::receiveFile()
 
 void model::newConnect(qintptr socketDescriptor)
 {
+    //judge same client
+    int mark = 0;
+    for (int j = 0;
+         j < socketList.size();
+         j++)
+        if(socketDescriptor == socketList.at(j)->socketDescriptor())
+            mark = 1;
+    if (mark ==1 )
+        return;
+
+    //new client
     QTcpSocket* m_tcp = new QTcpSocket;
     m_tcp->setSocketDescriptor(socketDescriptor);
     socketList.append(m_tcp);
     qDebug()<<"socket state:"<<m_tcp->state();
     emit SsocketListUpdate(socketList);
+    //get client message
     connect(m_tcp, &QTcpSocket::readyRead,
             this, [=](){
         QByteArray msg = m_tcp->readAll();
-        qDebug()<<"get msg"<<QString(msg);
         getClientMessage(msg);
     });
+
+    //client disconnect
     connect(m_tcp, &QTcpSocket::disconnected,
             this, [=](){
-        qDebug()<<"disconnect";
         clientDisconnected(m_tcp->socketDescriptor());
-        emit SsocketListUpdate(socketList);
     });
-    qDebug()<<"list size:"<<socketList.size();
 }
 
 void model::serverError()

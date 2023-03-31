@@ -85,6 +85,12 @@ void model_client::initialSendFile()
 
 }
 
+void model_client::slotSendClientMessage(QByteArray message)
+{
+    msg = message;
+    sendClientMessage();
+}
+
 void model_client::on_BselectFile_clicked()
 {
     QString filePath = QFileDialog::getOpenFileName();

@@ -4,7 +4,7 @@
 #include <QMainWindow>
 #include <QFile>
 #include <QFileInfo>
-#include <QTime>
+#include <QDateTime>
 
 class readDialog : public QObject
 {
@@ -13,18 +13,15 @@ class readDialog : public QObject
 public:
     readDialog(QWidget *parent = 0);
 
-private:
-    QTime sendTime;
-
 signals:
     void sendInformation(QString, QString);
     void warningNotMyDialog();
     void sendProgress(int);
-    void SopenMyDialog(QTime);
+    void SopenMyDialog(QDateTime);
     void SreadComplete();
 
 public slots:
-    void readAndSendDialog(QString path, QTime startSendTime);
+    void readAndSendDialog(QString path, QDateTime startSendTime, int readBaseSide, int spead);
 
 private:
     void changeHexToAsc(QString str, QByteArray &senddata);
@@ -47,11 +44,11 @@ public:
     readDialog* dialogRead;
 
 signals:
-    void sendFile(QString, QTime);
+    void sendFile(QString, QDateTime, int, int);
     void sendInformation(QString, QString);
     void SendTask();
     void SopenWrongDialog();
-    void SopenRightDialog(QTime);
+    void SopenRightDialog(QDateTime);
     void SrepeatComplete();
 
 private slots:
@@ -63,8 +60,9 @@ private slots:
 
 private:
     Ui::sendByDialog *ui;
-    QTime startSendTime;
+    QDateTime startSendTime;
     int lineNum;
+    int readBaseSide;
 };
 
 #endif // SENDBYDIALOG_H

@@ -4,6 +4,7 @@
 #include <QMessageBox>
 #include <QThread>
 #include <QDebug>
+#include <QtCore/qmath.h>
 
 sendByDialog::sendByDialog(QWidget *parent) :
     QMainWindow(parent),
@@ -26,6 +27,8 @@ void sendByDialog::on_BselectDialogPath_clicked()
         return;
     }
     ui->Bconfirm->setEnabled(true);
+    ui->groupBox->setEnabled(true);
+    ui->CBrepeadSpead->setEnabled(true);
     ui->LEdialogPath->setText(filePath);
     ui->progressBar->setValue(0);
 }
@@ -35,6 +38,12 @@ void sendByDialog::on_Bconfirm_clicked()
     dialogRead = new readDialog;
     QThread* thread = new QThread(this);
 
+    //readBaseSide = 0 read from receive
+    //readBaseSide = 1 read from send
+    if (ui->RBsendBaseOnReceive->isChecked())
+        readBaseSide = 0;
+    else
+        readBaseSide = 1;
     connect(this, &sendByDialog::sendFile,
             dialogRead, &readDialog::readAndSendDialog);
     connect(dialogRead, &readDialog::sendProgress,
@@ -54,7 +63,7 @@ void sendByDialog::on_Bconfirm_clicked()
         emit SendTask();
     });
     connect(dialogRead, &readDialog::SopenMyDialog,
-            this, [=](QTime time){
+            this, [=](QDateTime time){
         emit SopenRightDialog(time);
     });
     connect(dialogRead, &readDialog::SreadComplete,
@@ -66,10 +75,13 @@ void sendByDialog::on_Bconfirm_clicked()
     dialogRead->moveToThread(thread);
     thread->start();
 
-    QTime time = QTime::currentTime();
+    QDateTime time = QDateTime::currentDateTime();
 
-    emit sendFile(ui->LEdialogPath->text(), time);
+    int spead = qPow(2, ui->CBrepeadSpead->currentIndex());
+    emit sendFile(ui->LEdialogPath->text(), time, readBaseSide, spead);
     ui->Bconfirm->setEnabled(false);
+    ui->groupBox->setEnabled(false);
+    ui->CBrepeadSpead->setEnabled(false);
 }
 
 void sendByDialog::on_Bcancel_clicked()
@@ -133,7 +145,7 @@ readDialog::readDialog(QWidget *parent) :
 
 }
 
-void readDialog::readAndSendDialog(QString path, QTime startSendTime)
+void readDialog::readAndSendDialog(QString path, QDateTime startSendTime, int readBaseSide, int spead)
 {
     qDebug()<<"open dialog in Thread: "<<
               QThread::currentThread();
@@ -145,9 +157,9 @@ void readDialog::readAndSendDialog(QString path, QTime startSendTime)
     int lineNum = 0;
     file.open(QFile::ReadOnly);
 
-    QTime dialogLastTime;
-    QTime dialogNextTime;
-    QTime lastSendTime;
+    QDateTime dialogLastTime;
+    QDateTime dialogNextTime;
+    QDateTime lastSendTime;
 
     QString content;
     QString side;
@@ -159,7 +171,7 @@ void readDialog::readAndSendDialog(QString path, QTime startSendTime)
         QByteArray line = file.readLine();
         QString lineASC = QString(line);
         QString dialogTimeString = lineASC.section('[',1,-1).section(']',0,0);
-        dialogNextTime = QTime::fromString(dialogTimeString, "hh:mm:ss.zzz");
+        dialogNextTime = QDateTime::fromString(dialogTimeString, "yyyy.mm.dd hh:mm:ss.zzz");
         qDebug()<<"get dialog next time:"<<dialogNextTime;
         contentIncludeSide = lineASC.section(']', 1, -1);
 
@@ -173,49 +185,114 @@ void readDialog::readAndSendDialog(QString path, QTime startSendTime)
                 lineNum++;
             }
         }
-        else if(contentIncludeSide.startsWith(" Server") ||
-                contentIncludeSide.startsWith(" Client"))
+        if(readBaseSide == 0)
         {
-            side = lineASC.section(']', 1, 1).section(":", 0, 0);
-            content = lineASC.section(':', 3, -1).simplified();
-            QByteArray tempData;
-            changeHexToAsc(content, tempData);
-           if (isFirstContent == 0)
-           {
-               emit SopenMyDialog(dialogNextTime);
-               emit sendInformation(side, QString(tempData));
-               qDebug()<<"send next message:"<<content
-                      <<"from"<<side
-                      <<"at"<<QTime::currentTime();
-               lastSendTime = QTime::currentTime();
-               dialogLastTime = dialogNextTime;
-               lineNum++;
-               isFirstContent = 1;
-           }
-           else
-           {
-               int timeDifference = dialogLastTime.msecsTo(dialogNextTime);
+            //read base on receive
+            if(contentIncludeSide.startsWith(" Receive Server") ||
+                    contentIncludeSide.startsWith(" Receive Client") ||
+                    contentIncludeSide.startsWith(" Receive UDP"))
 
-               while(1)
+            {
+                side = lineASC.section(']', 1, 1).section(":", 0, 0);
+                if (side.endsWith("Client Message"))
+                    side = " Client";
+                else if (side.endsWith("Server Message"))
+                    side = " Server";
+                else
+                    side = " UDP";
+                content = lineASC.section(':', 3, -1).simplified();
+                QByteArray tempData;
+                changeHexToAsc(content, tempData);
+                if (isFirstContent == 0)
+                {
+                    emit SopenMyDialog(dialogNextTime);
+                    emit sendInformation(side, QString(tempData));
+                    qDebug()<<"send next message:"<<content
+                            <<"from"<<side
+                            <<"at"<<QDateTime::currentDateTime();
+                    lastSendTime = QDateTime::currentDateTime();
+                    dialogLastTime = dialogNextTime;
+                    lineNum++;
+                    isFirstContent = 1;
+                }
+               else
                {
-                   if(lastSendTime.msecsTo(QTime::currentTime()) >= timeDifference)
+                   int timeDifference = dialogLastTime.msecsTo(dialogNextTime);
+                   timeDifference = timeDifference / spead;
+
+                   while(1)
                    {
-                       emit sendInformation(side, QString(tempData));
-                       lastSendTime = QTime::currentTime();
-                       dialogLastTime = dialogNextTime;
-                       qDebug()<<"send next message:"<<QString(tempData)
-                              <<"from"<<side
-                              <<"at"<<QTime::currentTime();
-                       lineNum++;
-                       break;
+                       if(lastSendTime.msecsTo(QDateTime::currentDateTime()) >= timeDifference)
+                       {
+                           emit sendInformation(side, QString(tempData));
+                           lastSendTime = QDateTime::currentDateTime();
+                           dialogLastTime = dialogNextTime;
+                           qDebug()<<"send next message:"<<QString(tempData)
+                                  <<"from"<<side
+                                  <<"at"<<QDateTime::currentDateTime();
+                           lineNum++;
+                           break;
+                       }
                    }
                }
-           }
-        }
+            }
 
-        sendSize += line.size();
-        sendDialogProgress = sendSize*100/fileSize;
-        emit sendProgress(sendDialogProgress);
+            sendSize += line.size();
+            sendDialogProgress = sendSize*100/fileSize;
+            emit sendProgress(sendDialogProgress);
+        }
+        else
+        //read base on send
+        {
+            if(contentIncludeSide.startsWith(" Send by"))
+            {
+                side = lineASC.section(']', 1, 1).section(":", 0, 0);
+                if (side.endsWith("Client"))
+                    side = " Client";
+                else if (side.endsWith("Server"))
+                    side = " Server";
+                else
+                    side = " UDP";
+                content = lineASC.section(':', 3, -1).simplified();
+                QByteArray tempData;
+                changeHexToAsc(content, tempData);
+               if (isFirstContent == 0)
+               {
+                   emit SopenMyDialog(dialogNextTime);
+                   emit sendInformation(side, QString(tempData));
+                   qDebug()<<"send next message:"<<content
+                          <<"from"<<side
+                          <<"at"<<QDateTime::currentDateTime();
+                   lastSendTime = QDateTime::currentDateTime();
+                   dialogLastTime = dialogNextTime;
+                   lineNum++;
+                   isFirstContent = 1;
+               }
+               else
+               {
+                   int timeDifference = dialogLastTime.msecsTo(dialogNextTime);
+                   timeDifference = timeDifference / spead;
+
+                   while(1)
+                   {
+                       if(lastSendTime.msecsTo(QDateTime::currentDateTime()) >= timeDifference)
+                       {
+                           emit sendInformation(side, QString(tempData));
+                           lastSendTime = QDateTime::currentDateTime();
+                           dialogLastTime = dialogNextTime;
+                           qDebug()<<"send next message:"<<QString(tempData)
+                                  <<"from"<<side
+                                  <<"at"<<QDateTime::currentDateTime();
+                           lineNum++;
+                           break;
+                       }
+                   }
+               }
+            }
+            sendSize += line.size();
+            sendDialogProgress = sendSize*100/fileSize;
+            emit sendProgress(sendDialogProgress);
+        }
     }
 
     if(sendSize == fileSize)
