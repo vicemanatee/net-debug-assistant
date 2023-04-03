@@ -966,10 +966,10 @@ void controller::getUPDMsg(QString str)
 
         if(ui->RBreceiveSetAsc->isChecked())
         //appear ASC
-            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + str);
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("Receive by UDP: ") + str);
         else
         //apear HEX
-            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + str.toLatin1().toHex());
+            ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("Receive by UDP：") + str.toLatin1().toHex());
     }
     else{
 //adding head
@@ -985,11 +985,11 @@ void controller::getUPDMsg(QString str)
             {
                 //apear in ASCII
                 if (ui->RBreceiveSetAsc->isChecked())
-                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + realMsg.toUtf8() + " " +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("Receive by UDP：") + realMsg.toUtf8() + " " +
                                 tr("信息长度") + QString::number(lengthOfget));
                 else
                 //apear in HEX
-                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("获得UDP传输：") + realMsg.toUtf8().toHex() + " " +
+                    ui->Edialog->append("[" + QDateTime::currentDateTime().toString(timeFormat) + "] " + tr("Receive by UDP：") + realMsg.toUtf8().toHex() + " " +
                                 tr("信息长度") + QString::number(lengthOfget));
             }
             else
