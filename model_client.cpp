@@ -61,6 +61,8 @@ void model_client::initialSendFile()
     sendFile->moveToThread(t);
     t->start();
 
+    QString finishSendFile = "|FILEFINISH&&&";
+
     //send path to translate class
     //start to read & translate
     connect(this, &model_client::SsendFile,
@@ -78,6 +80,7 @@ void model_client::initialSendFile()
 
     connect(sendFile, &sendFileInThread::SfileSendSuccess,
             this, [=](){
+        m_c->write(finishSendFile.toUtf8());
         ui->BsendFile->setEnabled(true);
         ui->LfilePath->clear();
     });
@@ -105,6 +108,13 @@ void model_client::on_BselectFile_clicked()
 
 void model_client::on_BsendFile_clicked()
 {
+    QFileInfo info(ui->LfilePath->text());
+    int fileSize = info.size();
+    QString startSendFile = "FILE&&&|" + QString::number(fileSize)
+            + "|";
+
+    m_c->write(startSendFile.toUtf8());
+
     emit SsendFile(ui->LfilePath->text());
     ui->BsendFile->setEnabled(false);
 }

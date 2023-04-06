@@ -21,13 +21,13 @@ void sendFileInThread::sendFile(QString path)
     file.open(QFile::ReadOnly);
 
     double len = 0.5;
-    QString startSendFile = "FILE&&&|" + QString::number(fileSize)
-            + "|";
-    QString finishSendFile = "|FILEFINISH&&&";
+
+
 
     do{
+        /*
         if (len == 0.5)
-            emit SreadTextLine(startSendFile.toUtf8());
+            emit SreadTextLine(startSendFile.toUtf8());*/
         char buffer[2*1024] = {0};
         len = 0;
         len = file.read(buffer,sizeof(buffer)-2);
@@ -39,7 +39,7 @@ void sendFileInThread::sendFile(QString path)
         emit ScurPercent(sendFileProgress);
         QThread::sleep(1);
     }while(len > 0);
-    emit SreadTextLine(finishSendFile.toUtf8());
+    //emit SreadTextLine(finishSendFile.toUtf8());
 
     qDebug()<<"send total size"<<sendSize;
     qDebug()<<"file real size"<<fileSize;

@@ -137,8 +137,8 @@ void model::newConnect(qintptr socketDescriptor)
     //get client message
     connect(m_tcp, &QTcpSocket::readyRead,
             this, [=](){
-        QByteArray msg = m_tcp->readAll();
-        getClientMessage(msg);
+        QByteArray clientMessage = m_tcp->readAll();
+        getClientMessage(clientMessage);
     });
 
     //client disconnect
