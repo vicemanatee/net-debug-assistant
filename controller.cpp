@@ -861,7 +861,7 @@ void controller::on_CBtypePro_currentIndexChanged(const QString &arg1)
     {
     //protocal type change to UDP
         ui->BactivateListen->setEnabled(false);
-        ui->LElocalHostAdd->setText(tr("192.168.1.25"));
+        ui->LElocalHostAdd->setText(tr("192.168.200.1"));
         ui->BsendSetBreak->setEnabled(true);
         ui->CBclientList->setEnabled(false);
         ui->LEcastSelect->setEnabled(false);
@@ -1158,6 +1158,7 @@ void controller::on_CBopenFile_toggled(bool checked)
             return;
         }
         ui->EtextSend->setReadOnly(true);
+        ui->EtextSend->clear();
         ui->EtextSend->setText(openFilePath);
         ui->GBsendSideSelect->setEnabled(false);
         ui->GBsendSetInputType->setEnabled(false);
@@ -1173,6 +1174,7 @@ void controller::on_CBopenFile_toggled(bool checked)
         connect(openFile, &sendFileInThread::SfileSendSuccess,
                 this, [=](){
             ui->EtextSend->setText(tr("文件读取完毕"));
+            ui->CBopenFile->setChecked(false);
         });
     }
     else

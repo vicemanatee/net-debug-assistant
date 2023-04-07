@@ -5,7 +5,7 @@ model_UDPconnnect::model_UDPconnnect(QWidget *parent):
     QWidget(parent)
 {
     udpSocket = new QUdpSocket;
-    ip = "192.168.1.25";
+    ip = "192.168.200.1";
     port = 8899;
     connect(udpSocket, &QUdpSocket::readyRead,
             this, &model_UDPconnnect::readyRead);
@@ -25,9 +25,9 @@ void model_UDPconnnect::readyRead()
 
 void model_UDPconnnect::sendMsg(QString str)
 {
-    udpSocket->writeDatagram(str.toUtf8(), QHostAddress::Broadcast,
+    int succeed = udpSocket->writeDatagram(str.toUtf8(), ip,//QHostAddress::Broadcast,
                              port);
-    qDebug()<<"send Message"<< str <<"ip"<<ip;
+    qDebug()<<"success?"<<succeed<<" ip:"<<ip;
 }
 
 void model_UDPconnnect::closeSocket()
