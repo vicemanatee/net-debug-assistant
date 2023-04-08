@@ -1,7 +1,6 @@
 #ifndef VIEW_H
 #define VIEW_H
 
-#include <control.h>
 #include <controller.h>
 
 class view : public QObject

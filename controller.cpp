@@ -21,7 +21,7 @@ controller::controller(QWidget *parent) :
 
     head = "$$$$^";
 
-    timeFormat = "yyyy.mm.dd hh:mm:ss.zzz";
+    timeFormat = "yyyy.MM.dd hh:mm:ss.zzz";
 
     qDebug()<<"main thread"<<QThread::currentThread();
 

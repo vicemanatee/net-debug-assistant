@@ -37,7 +37,7 @@ void sendFileInThread::sendFile(QString path)
 
         sendFileProgress = 100*sendSize/fileSize;
         emit ScurPercent(sendFileProgress);
-        QThread::sleep(1);
+        QThread::msleep(20);
     }while(len > 0);
     //emit SreadTextLine(finishSendFile.toUtf8());
 
